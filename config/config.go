@@ -4,8 +4,16 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path"
+	"prdo/api/digitalocean/enum/droplet"
+	"prdo/api/digitalocean/enum/region"
+	"regexp"
+	"strconv"
+	"strings"
+
+	yaml "gopkg.in/yaml.v2"
 )
 
 const configDirName = ".prototype.do"
@@ -13,10 +21,13 @@ const configDirName = ".prototype.do"
 type Config struct {
 	DigitalOceanAPIKey string
 	Region             string
-	VolumeSize         string
+	VolumeSize         int
 	DropletSlug        string
 	BareDomainName     string
 }
+
+const defaultRegion = region.NYC3
+const defaultDroplet = droplet.S2VCPU2GB
 
 // GetConfigDir returns the configuration directory
 func GetConfigDir() (string, error) {
@@ -30,7 +41,7 @@ func GetConfigDir() (string, error) {
 }
 
 func getConfigFilename(projectName string) string {
-	return fmt.Sprint("%v.%v", projectName, ".yml")
+	return fmt.Sprintf("%v.yml", projectName)
 }
 
 func getTextInput(prompt string, validationFunc func(string) bool) (string, error) {
@@ -45,6 +56,8 @@ func getTextInput(prompt string, validationFunc func(string) bool) (string, erro
 			return "", err
 		}
 
+		// Trim any leading or trailing whitespace, including the delimiter
+		input = strings.Trim(input, " \n\t")
 		result = validationFunc(input)
 	}
 
@@ -55,23 +68,101 @@ func NewConfig(projectName string) (*Config, error) {
 	config := Config{}
 
 	apiKey, err := getTextInput(
-		"Please enter your DigitalOcean API key\n>",
+		"DigitalOcean API key\n>",
 		func(value string) bool {
 			return len(value) > 0
 		},
 	)
+	if err != nil {
+		return nil, err
+	}
+	config.DigitalOceanAPIKey = apiKey
 
+	for _, r := range region.Values {
+		fmt.Printf("%v	%v\n", r, region.GetName(r))
+	}
+	r, err := getTextInput(
+		fmt.Sprintf("Deployment region (enter for default %v)\n>", defaultRegion),
+		func(value string) bool {
+			return (len(value) == 0 ||
+				region.IsValid(value))
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	config.DigitalOceanAPIKey = apiKey
+	if len(r) == 0 {
+		config.Region = defaultRegion
+	} else {
+		config.Region = r
+	}
 
-	// configDir, err := GetConfigDir()
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// configFilePath := path.Join(configDir, getConfigFilename(projectName))
+	volumeStr, err := getTextInput(
+		"Volume size in gigabytes (minimum 1)\n>",
+		func(value string) bool {
+			i, err := strconv.Atoi(value)
+			if err != nil {
+				return false
+			}
+
+			return i >= 1
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	config.VolumeSize, _ = strconv.Atoi(volumeStr)
+
+	for _, d := range droplet.Values {
+		fmt.Println(d)
+	}
+	d, err := getTextInput(
+		fmt.Sprintf("Droplet slug (enter for default %v)\n>", defaultDroplet),
+		func(value string) bool {
+			return (len(value) == 0 ||
+				droplet.IsValid(value))
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(d) == 0 {
+		d = defaultDroplet
+	}
+	config.DropletSlug = d
+
+	bareDomain, err := getTextInput(
+		"Bare domain name (eg: mysite.com)\n>",
+		func(value string) bool {
+			// Simple regular expression to reject trivial cases, not meant to be thorough
+			matched, err := regexp.Match("^\\w+\\.\\w{1,3}$", []byte(value))
+			if err != nil {
+				panic(err)
+			}
+			return matched
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	config.BareDomainName = bareDomain
+
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return nil, err
+	}
+	configFilePath := path.Join(configDir, getConfigFilename(projectName))
+
+	configBytes, err := yaml.Marshal(&config)
+	if err != nil {
+		return nil, err
+	}
+
+	err = ioutil.WriteFile(configFilePath, configBytes, os.FileMode(0600))
+	if err != nil {
+		return nil, fmt.Errorf("Unable to write configuration file", configFilePath)
+	}
 
 	return &config, nil
 }
