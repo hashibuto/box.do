@@ -8,7 +8,8 @@ import (
 )
 
 var cli struct {
-	Init InitCmd `cmd help="Initializes a new project"`
+	Init    InitCmd    `cmd help="Initializes a new project"`
+	Mkimage MkImageCmd `cmd help="Make DigitalOcean base image"`
 }
 
 func main() {
