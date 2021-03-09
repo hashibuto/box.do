@@ -5,7 +5,7 @@ import (
 	"prdo/api/digitalocean"
 )
 
-type sshKey struct {
+type SSHKey struct {
 	ID int `json:"id"`
 }
 
@@ -15,32 +15,32 @@ type createBody struct {
 }
 
 type createResponse struct {
-	SSHKey sshKey `json:"ssh_key"`
+	SSHKey SSHKey `json:"ssh_key"`
 }
 
 const basePath = "/account/keys"
 
 // Create creates an SSH key entry for publicKey and returns the ID if successful
-func Create(svc *digitalocean.Service, name string, publicKey string) (int, error) {
+func Create(svc *digitalocean.Service, name string, publicKey string) (*SSHKey, error) {
 	body := &createBody{
 		Name:      name,
 		PublicKey: publicKey,
 	}
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	respBody, err := svc.Post(basePath, jsonBody)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	createdKey := &createResponse{}
 	err = json.Unmarshal(respBody, createdKey)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	return createdKey.SSHKey.ID, nil
+	return &createdKey.SSHKey, nil
 }
