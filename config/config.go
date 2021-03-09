@@ -7,8 +7,10 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"prdo/api/digitalocean"
 	"prdo/api/digitalocean/enum/droplet"
 	"prdo/api/digitalocean/enum/region"
+	"prdo/api/digitalocean/sshkeys"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,6 +20,7 @@ import (
 
 const configDirName = ".prototype.do"
 
+// Config holds the project configuration
 type Config struct {
 	DigitalOceanAPIKey string
 	Region             string
@@ -25,8 +28,10 @@ type Config struct {
 	DropletSlug        string
 	BareDomainName     string
 	PrivateKeyFilename string
-	ImageID            string
-	PublicKeyID        string
+	ImageID            int
+	PublicKeyID        int
+	BlockStorageID     string
+	DropletID          int
 }
 
 const defaultRegion = region.NYC3
@@ -176,13 +181,32 @@ func NewConfig(projectName string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	if pkFilename == "" {
+		pkFilename = defaultKeyFile
+	}
 	config.PrivateKeyFilename = pkFilename
+
+	// Load public key
+	pbkFilename := fmt.Sprintf("%v.pub", pkFilename)
+	pbkData, err := ioutil.ReadFile(pbkFilename)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to read public key file %v", pbkFilename)
+	}
 
 	configDir, err := GetConfigDir()
 	if err != nil {
 		return nil, err
 	}
 	configFilePath := path.Join(configDir, getConfigFilename(projectName))
+
+	doSvc := digitalocean.NewService(apiKey)
+	publicKeyID, err := sshkeys.Create(doSvc, fmt.Sprintf("prdo-key-%v", strings.ToLower(projectName)), string(pbkData))
+	if err != nil {
+		fmt.Println("Unable to post new SSH public key to DigitalOcean")
+		return nil, err
+	}
+
+	config.PublicKeyID = publicKeyID
 
 	configBytes, err := yaml.Marshal(&config)
 	if err != nil {
@@ -191,7 +215,7 @@ func NewConfig(projectName string) (*Config, error) {
 
 	err = ioutil.WriteFile(configFilePath, configBytes, os.FileMode(0600))
 	if err != nil {
-		return nil, fmt.Errorf("Unable to write configuration file", configFilePath)
+		return nil, fmt.Errorf("Unable to write configuration file %v", configFilePath)
 	}
 
 	return &config, nil

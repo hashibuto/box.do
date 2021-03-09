@@ -17,7 +17,7 @@ func (cmd *MkImageCmd) Run() error {
 		return err
 	}
 
-	if cmd.Overwrite == false && len(cfg.ImageID) != 0 {
+	if cmd.Overwrite == false && cfg.ImageID != 0 {
 		fmt.Println("It appears you've already created a DigitalOcean image.")
 		fmt.Println("Please use the --overwrite option if you'd like to overwrite it with a new one.")
 		os.Exit(1)
