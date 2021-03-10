@@ -24,10 +24,10 @@ func NewSSHConn(privkeyFilename, username, hostname string) (*SSHConn, error) {
 
 	var signer ssh.Signer
 	signer, err = ssh.ParsePrivateKey(keyData)
-	if err == ssh.PassphraseMissingError {
+	if _, ok := err.(*ssh.PassphraseMissingError); ok == true {
 		for {
 			var input string
-			fmt.Print(">")
+			fmt.Print("Enter your SSH key passphrase\n>")
 			reader := bufio.NewReader(os.Stdin)
 			input, err = reader.ReadString('\n')
 			if err != nil {
