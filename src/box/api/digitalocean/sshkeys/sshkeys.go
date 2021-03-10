@@ -1,8 +1,8 @@
 package sshkeys
 
 import (
+	"box/api/digitalocean"
 	"encoding/json"
-	"prdo/api/digitalocean"
 )
 
 type SSHKey struct {
@@ -36,8 +36,8 @@ func Create(svc *digitalocean.Service, name string, publicKey string) (*SSHKey, 
 		return nil, err
 	}
 
-	createdKey := &createResponse{}
-	err = json.Unmarshal(respBody, createdKey)
+	createdKey := createResponse{}
+	err = json.Unmarshal(respBody, &createdKey)
 	if err != nil {
 		return nil, err
 	}

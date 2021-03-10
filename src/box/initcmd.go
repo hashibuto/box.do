@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"prdo/config"
+	"box/config"
 )
 
 type InitCmd struct {

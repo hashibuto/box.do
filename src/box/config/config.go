@@ -1,16 +1,16 @@
 package config
 
 import (
+	"box/api/digitalocean"
+	"box/api/digitalocean/enum/droplet"
+	"box/api/digitalocean/enum/region"
+	"box/api/digitalocean/sshkeys"
 	"bufio"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
-	"prdo/api/digitalocean"
-	"prdo/api/digitalocean/enum/droplet"
-	"prdo/api/digitalocean/enum/region"
-	"prdo/api/digitalocean/sshkeys"
 	"regexp"
 	"strconv"
 	"strings"
@@ -32,6 +32,7 @@ type Config struct {
 	PublicKeyID        int
 	BlockStorageID     string
 	DropletID          int
+	DropletPublicIP    string
 }
 
 const defaultRegion = region.NYC3
@@ -200,7 +201,7 @@ func NewConfig(projectName string) (*Config, error) {
 	configFilePath := path.Join(configDir, getConfigFilename(projectName))
 
 	doSvc := digitalocean.NewService(apiKey)
-	createdKey, err := sshkeys.Create(doSvc, fmt.Sprintf("prdo-key-%v", strings.ToLower(projectName)), string(pbkData))
+	createdKey, err := sshkeys.Create(doSvc, fmt.Sprintf("box-key-%v", strings.ToLower(projectName)), string(pbkData))
 	if err != nil {
 		fmt.Println("Unable to post new SSH public key to DigitalOcean")
 		return nil, err
