@@ -14,15 +14,15 @@ type SSHConn struct {
 	Conn *ssh.Client
 }
 
-// NewSSHConn returns a new SSH connection
-func NewSSHConn(privkeyFilename, username, hostname string) (*SSHConn, error) {
+// GetSigner returns an SSH signer object for use with SSH connections
+func GetSigner(privkeyFilename string) (ssh.Signer, error) {
+	var signer ssh.Signer
 	var err error
 	keyData, err := ioutil.ReadFile(privkeyFilename)
 	if err != nil {
 		return nil, err
 	}
 
-	var signer ssh.Signer
 	signer, err = ssh.ParsePrivateKey(keyData)
 	if _, ok := err.(*ssh.PassphraseMissingError); ok == true {
 		for {
@@ -46,6 +46,11 @@ func NewSSHConn(privkeyFilename, username, hostname string) (*SSHConn, error) {
 		return nil, err
 	}
 
+	return signer, nil
+}
+
+// NewSSHConn returns a new SSH connection
+func NewSSHConn(signer ssh.Signer, username, hostname string) (*SSHConn, error) {
 	config := &ssh.ClientConfig{
 		User: username,
 		Auth: []ssh.AuthMethod{
@@ -54,7 +59,7 @@ func NewSSHConn(privkeyFilename, username, hostname string) (*SSHConn, error) {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // Yes, this is a bad practice
 	}
 
-	conn, err := ssh.Dial("tcp", hostname, config)
+	conn, err := ssh.Dial("tcp", fmt.Sprintf("%v:22", hostname), config)
 	if err != nil {
 		return nil, err
 	}
@@ -75,19 +80,6 @@ func (conn *SSHConn) Run(commands []string) error {
 
 	session.Stdout = os.Stdout
 	session.Stderr = os.Stderr
-
-	// stdoutPipe, err := session.StdoutPipe()
-	// if err != nil {
-	// 	return err
-	// }
-	// stderrPipe, err := session.StderrPipe()
-	// if err != nil {
-	// 	return err
-	// }
-
-	// // Perform background copy of SSH session output to the local output streams
-	// go io.Copy(os.Stdout, stdoutPipe)
-	// go io.Copy(os.Stderr, stderrPipe)
 
 	err = session.Run(strings.Join(commands, " && "))
 	return err

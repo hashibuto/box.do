@@ -18,7 +18,7 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-const configDirName = ".prototype.do"
+const configDirName = ".box.do"
 
 // Config holds the project configuration
 type Config struct {

@@ -1,4 +1,4 @@
-# prototype.do
+# box.do
 Is a toolbelt which enables you to quickly deploy application prototypes and demos to DigitalOcean's infrastructure.  This serves as a cost effective stop-gap solution for demoing and beta-testing a project prior to truly productionizing it.
 
 ## Key features

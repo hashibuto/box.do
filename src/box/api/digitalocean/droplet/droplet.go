@@ -25,19 +25,19 @@ type Droplet struct {
 }
 
 type createFromPublicImageRequest struct {
-	Name    string   `json:"name"`
-	Size    string   `json:"size"`
-	Region  string   `json:"region"`
-	Image   string   `json:"image"`
-	SSHKeys []string `json:"ssh_keys"`
+	Name    string `json:"name"`
+	Size    string `json:"size"`
+	Region  string `json:"region"`
+	Image   string `json:"image"`
+	SSHKeys []int  `json:"ssh_keys"`
 }
 
 type createFromPrivateImageRequest struct {
-	Name    string   `json:"name"`
-	Size    string   `json:"size"`
-	Region  string   `json:"region"`
-	Image   int      `json:"image"`
-	SSHKeys []string `json:"ssh_keys"`
+	Name    string `json:"name"`
+	Size    string `json:"size"`
+	Region  string `json:"region"`
+	Image   int    `json:"image"`
+	SSHKeys []int  `json:"ssh_keys"`
 }
 
 type createResponse struct {
@@ -62,12 +62,13 @@ func create(svc *digitalocean.Service, reqBody []byte) (*Droplet, error) {
 }
 
 // CreateFromPublicImage creates a droplet from a public image slug
-func CreateFromPublicImage(svc *digitalocean.Service, name, size, region, imageSlug string, SSHKeys []int) (*Droplet, error) {
+func CreateFromPublicImage(svc *digitalocean.Service, name, size, region, imageSlug string, sshKeys []int) (*Droplet, error) {
 	cr := createFromPublicImageRequest{
-		Name:   name,
-		Size:   size,
-		Region: region,
-		Image:  imageSlug,
+		Name:    name,
+		Size:    size,
+		Region:  region,
+		Image:   imageSlug,
+		SSHKeys: sshKeys,
 	}
 
 	reqBody, err := json.Marshal(&cr)
@@ -79,12 +80,13 @@ func CreateFromPublicImage(svc *digitalocean.Service, name, size, region, imageS
 }
 
 // CreateFromPrivateImage creates a droplet from a public image ID
-func CreateFromPrivateImage(svc *digitalocean.Service, name, size, region string, imageID int, SSHKeys []int) (*Droplet, error) {
+func CreateFromPrivateImage(svc *digitalocean.Service, name, size, region string, imageID int, sshKeys []int) (*Droplet, error) {
 	cr := createFromPrivateImageRequest{
-		Name:   name,
-		Size:   size,
-		Region: region,
-		Image:  imageID,
+		Name:    name,
+		Size:    size,
+		Region:  region,
+		Image:   imageID,
+		SSHKeys: sshKeys,
 	}
 
 	reqBody, err := json.Marshal(&cr)

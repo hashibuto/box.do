@@ -14,6 +14,8 @@ import (
 const imageHostName = "box-image-maker"
 const maxConnectAttempts = 10
 const sshRetrySeconds = 10
+const configRepo = "box.do-config"
+const adminUser = "owner"
 
 type MkImageCmd struct {
 	Name      string `arg help="Project name"`
@@ -69,15 +71,17 @@ func (cmd *MkImageCmd) Run() error {
 		os.Exit(1)
 	}
 
+	signer, err := sshconn.GetSigner(cfg.PrivateKeyFilename)
 	connected := false
 	var conn *sshconn.SSHConn
 	for i := 0; i < maxConnectAttempts; i++ {
 		fmt.Println("Trying to contact via SSH...")
-		conn, err = sshconn.NewSSHConn(cfg.PrivateKeyFilename, "root", ipAddress)
+		conn, err = sshconn.NewSSHConn(signer, "root", ipAddress)
 		if err == nil {
 			connected = true
 			break
 		}
+		fmt.Println(err)
 		fmt.Printf("Failed, trying again in %vs...\n", sshRetrySeconds)
 		time.Sleep(time.Second * sshRetrySeconds)
 	}
@@ -86,14 +90,17 @@ func (cmd *MkImageCmd) Run() error {
 		fmt.Printf("Unable to connect via SSH, aborting")
 		os.Exit(1)
 	}
-
 	defer conn.Close()
-	err = conn.Run([]string{":"})
+	fmt.Println("SSH connection established, continuing")
+
+	err = conn.Run([]string{
+		fmt.Sprintf("wget -O /root/config_image.sh https://raw.githubusercontent.com/hashibuto/%v/master/scripts/config_image.sh", configRepo),
+		"chmod +x /root/config_image.sh",
+		fmt.Sprintf("/root/config_image.sh %v %v", adminUser, configRepo),
+	})
 	if err != nil {
 		return err
 	}
-
-	fmt.Println("SSH is working, continuing")
 
 	return nil
 }
