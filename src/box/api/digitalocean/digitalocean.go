@@ -56,6 +56,10 @@ func (svc *Service) doRequest(req *http.Request) ([]byte, error) {
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		// A 204 indicates no response body
+		if resp.StatusCode == 204 {
+			return nil, nil
+		}
 		body := &ResponseBody{}
 		err = json.Unmarshal(data, body)
 		if err != nil {
@@ -93,4 +97,15 @@ func (svc *Service) Post(url string, body []byte) ([]byte, error) {
 		return nil, err
 	}
 	return svc.doRequest(req)
+}
+
+// Delete executes an authenticated DELETE request against the provided URL suffix.
+// Nil is returned unless an error occurs.
+func (svc *Service) Delete(url string) error {
+	req, err := http.NewRequest("DELETE", getFullURL(url), nil)
+	if err != nil {
+		return err
+	}
+	_, err = svc.doRequest(req)
+	return err
 }

@@ -23,7 +23,7 @@ func (cmd *InitCmd) Run() error {
 		return err
 	}
 
-	config, err := config.NewConfig(cmd.Name)
+	config, err := config.New(cmd.Name)
 	if err != nil {
 		return err
 	}

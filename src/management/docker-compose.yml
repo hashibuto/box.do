@@ -1,0 +1,46 @@
+# All host mounts are contained under /mnt/datavol for easy cleanup
+
+version: "3.8"
+services:
+  docker-registry:
+    restart: always
+    hostname: registry
+    container_name: registry
+    image: registry:2.7.1
+    ports:
+      # Map to localhost port 5000 for SSH tunnel port forwarding
+      - 5000:5000
+    networks:
+      - box
+    volumes:
+      # Host mount registry storage area under block storage mount
+      - /mnt/datavol/registry:/var/lib/registry
+
+  nginx:
+    restart: always
+    hostname: nginx
+    container_name: nginx
+    environment:
+      DOMAIN_NAME: ${DOMAIN_NAME}
+    build:
+      context: cron
+      dockerfile: ./Dockerfile
+    networks:
+      - box
+    volumes:
+      - /mnt/datavol/www/acme:/var/www/acme
+
+  cron:
+    restart: always
+    container_name: cron
+    environment:
+      DOMAIN_NAME: ${DOMAIN_NAME}
+    build:
+      context: cron
+      dockerfile: ./Dockerfile
+    volumes:
+      - /mnt/datavol/letsencrypt:/etc/letsencrypt
+      - /mnt/datavol/www/acme:/var/www/acme
+
+networks:
+  box:

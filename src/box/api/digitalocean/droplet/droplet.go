@@ -2,6 +2,7 @@ package droplet
 
 import (
 	"box/api/digitalocean"
+	"box/api/digitalocean/action"
 	"encoding/json"
 	"fmt"
 )
@@ -17,9 +18,10 @@ type Address struct {
 
 // Droplet represents a droplet structure
 type Droplet struct {
-	ID       int    `json:"id"`
-	Status   string `json:"status"`
-	Networks struct {
+	ID          int    `json:"id"`
+	Status      string `json:"status"`
+	SnapshotIds []int  `json:"snapshot_ids"`
+	Networks    struct {
 		V4 []Address `json:"v4"`
 	} `json:"networks"`
 }
@@ -111,4 +113,40 @@ func GetByID(svc *digitalocean.Service, dropletID int) (*Droplet, error) {
 	}
 
 	return &respObj.Droplet, nil
+}
+
+// CreateSnapshot creates a named snapshot of the given droplet
+func CreateSnapshot(svc *digitalocean.Service, dropletID int, name string) (*action.Action, error) {
+	type createSnapshotRequest struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+	}
+
+	req := &createSnapshotRequest{
+		Type: "snapshot",
+		Name: name,
+	}
+
+	reqBody, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	respBody, err := svc.Post(fmt.Sprintf("%v/%v/actions", basePath, dropletID), reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	actionResp := &action.Response{}
+	err = json.Unmarshal(respBody, actionResp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &actionResp.Action, nil
+}
+
+// Delete deletes a droplet by ID
+func Delete(svc *digitalocean.Service, dropletID int) error {
+	return svc.Delete(fmt.Sprintf("%v/%v", basePath, dropletID))
 }

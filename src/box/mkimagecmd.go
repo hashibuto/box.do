@@ -2,6 +2,7 @@ package main
 
 import (
 	"box/api/digitalocean"
+	"box/api/digitalocean/action"
 	"box/api/digitalocean/droplet"
 	dropletenum "box/api/digitalocean/enum/droplet"
 	"box/config"
@@ -22,9 +23,11 @@ type MkImageCmd struct {
 	Overwrite bool   `default=false help="Overwrite existing image"`
 }
 
+// Run runs the make image command, which creates a droplet image with the Box base confugration
+// for use in subsequent droplet deployments.
 func (cmd *MkImageCmd) Run() error {
 	var dropletObj *droplet.Droplet
-	cfg, err := config.LoadConfig(cmd.Name)
+	cfg, err := config.Load(cmd.Name)
 	if err != nil {
 		return err
 	}
@@ -102,5 +105,47 @@ func (cmd *MkImageCmd) Run() error {
 		return err
 	}
 
-	return nil
+	fmt.Printf("Waiting for droplet to power down...")
+	for dropletObj.Status != "off" {
+		time.Sleep(time.Second * 5)
+		fmt.Println("Checking droplet status...")
+		dropletObj, err = droplet.GetByID(doSvc, dropletObj.ID)
+	}
+
+	fmt.Println("Droplet powered down, creating snapshot")
+
+	actionObj, err := droplet.CreateSnapshot(doSvc, dropletObj.ID, "box-base")
+	if err != nil {
+		return err
+	}
+
+	for actionObj.Status != "completed" {
+		time.Sleep(time.Second * 5)
+		fmt.Println("Checking action status...")
+		actionObj, err = action.Get(doSvc, actionObj.ID)
+		if err != nil {
+			return err
+		}
+	}
+
+	fmt.Println("Snapshot complete")
+
+	dropletObj, err = droplet.GetByID(doSvc, dropletObj.ID)
+	if err != nil {
+		return err
+	}
+
+	cfg.ImageID = dropletObj.SnapshotIds[0]
+	err = cfg.Save()
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Deleting droplet")
+	err = droplet.Delete(doSvc, dropletObj.ID)
+	if err != nil {
+		return err
+	}
+	fmt.Println("Done")
+	return err
 }

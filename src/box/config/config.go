@@ -22,6 +22,8 @@ const configDirName = ".box.do"
 
 // Config holds the project configuration
 type Config struct {
+	ProjectName        string
+	Email              string
 	DigitalOceanAPIKey string
 	Region             string
 	VolumeSize         int
@@ -37,6 +39,16 @@ type Config struct {
 
 const defaultRegion = region.NYC3
 const defaultDroplet = droplet.S2VCPU2GB
+
+// https://golangcode.com/validate-an-email-address/
+var emailRegex = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+
+func isEmailValid(e string) bool {
+	if len(e) < 3 && len(e) > 254 {
+		return false
+	}
+	return emailRegex.MatchString(e)
+}
 
 // GetConfigDir returns the configuration directory
 func GetConfigDir() (string, error) {
@@ -76,9 +88,9 @@ func getTextInput(prompt string, validationFunc func(string) bool) (string, erro
 	return input, nil
 }
 
-// NewConfig returns a new config struct based on user input
-func NewConfig(projectName string) (*Config, error) {
-	config := Config{}
+// New returns a new config struct based on user input
+func New(projectName string) (*Config, error) {
+	config := Config{ProjectName: projectName}
 
 	apiKey, err := getTextInput(
 		"DigitalOcean API key",
@@ -161,6 +173,15 @@ func NewConfig(projectName string) (*Config, error) {
 	}
 	config.BareDomainName = bareDomain
 
+	email, err := getTextInput(
+		"TLS certificate registration email for use with letsencrypt",
+		isEmailValid,
+	)
+	if err != nil {
+		return nil, err
+	}
+	config.CertEmail = email
+
 	homeDir, _ := os.UserHomeDir()
 	defaultKeyFile := path.Join(homeDir, ".ssh", "id_rsa")
 	pkFilename, err := getTextInput(
@@ -222,8 +243,8 @@ func NewConfig(projectName string) (*Config, error) {
 	return &config, nil
 }
 
-// LoadConfig loads the YAML configuration associated with the project name, or returns an error
-func LoadConfig(projectName string) (*Config, error) {
+// Load loads the YAML configuration associated with the project name, or returns an error
+func Load(projectName string) (*Config, error) {
 	configDir, err := GetConfigDir()
 	if err != nil {
 		return nil, err
@@ -243,4 +264,19 @@ func LoadConfig(projectName string) (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+// Save saves an existing configuration to disk
+func (cfg *Config) Save() error {
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return err
+	}
+	configFilePath := path.Join(configDir, getConfigFilename(cfg.ProjectName))
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(configFilePath, data, os.FileMode(0600))
+	return err
 }
