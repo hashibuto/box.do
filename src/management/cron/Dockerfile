@@ -2,10 +2,14 @@ FROM alpine:3.13.2
 
 RUN apk update && \
   apk add --no-cache \
-  certbot
+  certbot \
+  curl \
+  openssl
 
-COPY /src/startup.sh /app/startup.sh
+COPY /src/start.sh /app/start.sh
+COPY /src/scripts/* /app/scripts/
+COPY /src/crontabs/* /etc/crontabs/
 
 WORKDIR /app
 
-CMD [ "./startup.sh" ]
+CMD [ "./start.sh" ]

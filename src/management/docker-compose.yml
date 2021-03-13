@@ -19,15 +19,16 @@ services:
   nginx:
     restart: always
     hostname: nginx
-    container_name: nginx
+    container_name: ${NGINX_CONTAINER_NAME}
     environment:
       DOMAIN_NAME: ${DOMAIN_NAME}
     build:
-      context: cron
+      context: nginx
       dockerfile: ./Dockerfile
     networks:
       - box
     volumes:
+      - /mnt/datavol/letsencrypt:/etc/letsencrypt
       - /mnt/datavol/www/acme:/var/www/acme
 
   cron:
@@ -35,12 +36,15 @@ services:
     container_name: cron
     environment:
       DOMAIN_NAME: ${DOMAIN_NAME}
+      EMAIL: ${EMAIL}
+      NGINX_CONTAINER_NAME: ${NGINX_CONTAINER_NAME}
     build:
       context: cron
       dockerfile: ./Dockerfile
     volumes:
       - /mnt/datavol/letsencrypt:/etc/letsencrypt
       - /mnt/datavol/www/acme:/var/www/acme
+      - /var/run/docker.sock:/var/run/docker.sock
 
 networks:
   box:
