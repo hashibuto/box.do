@@ -3,7 +3,6 @@ package digitalocean
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -21,6 +20,15 @@ type ResponseBody struct {
 	ID        string `json:"id"`
 	Message   string `json:"message"`
 	RequestID string `json:"request_id"`
+}
+
+type RespError struct {
+	StatusCode int
+	Message    string
+}
+
+func (e *RespError) Error() string {
+	return fmt.Sprintf("StatusCode: %v  Message %v", e.StatusCode, e.Message)
 }
 
 const baseURL = "https://api.digitalocean.com/v2"
@@ -72,7 +80,10 @@ func (svc *Service) doRequest(req *http.Request) ([]byte, error) {
 		} else {
 			message = fmt.Sprint("An API error occurred at ", req.URL)
 		}
-		return nil, errors.New(message)
+		return nil, &RespError{
+			StatusCode: resp.StatusCode,
+			Message:    message,
+		}
 	}
 
 	return data, nil

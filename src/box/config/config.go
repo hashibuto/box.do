@@ -180,7 +180,7 @@ func New(projectName string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	config.CertEmail = email
+	config.Email = email
 
 	homeDir, _ := os.UserHomeDir()
 	defaultKeyFile := path.Join(homeDir, ".ssh", "id_rsa")

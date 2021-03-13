@@ -38,7 +38,13 @@ func (cmd *MkImageCmd) Run() error {
 		os.Exit(1)
 	}
 
-	fmt.Println("Creating new droplet for base image...")
+	// Obtain the SSH signer first in order to avoid creating unnecessary resources, should this process fail
+	signer, err := sshconn.GetSigner(cfg.PrivateKeyFilename)
+	if err != nil {
+		return err
+	}
+
+	fmt.Print("Creating new droplet for base image...")
 	doSvc := digitalocean.NewService(cfg.DigitalOceanAPIKey)
 	dropletObj, err = droplet.CreateFromPublicImage(
 		doSvc,
@@ -48,11 +54,19 @@ func (cmd *MkImageCmd) Run() error {
 		droplet.DefaultPublicImage,
 		[]int{cfg.PublicKeyID},
 	)
+	if err != nil {
+		return err
+	}
+	fmt.Println("Done")
 
 	for dropletObj.Status == "new" {
 		time.Sleep(time.Second * 5)
-		fmt.Println("Checking droplet status...")
+		fmt.Print("Checking droplet status...")
 		dropletObj, err = droplet.GetByID(doSvc, dropletObj.ID)
+		if err != nil {
+			return err
+		}
+		fmt.Println(dropletObj.Status)
 	}
 
 	if dropletObj.Status != "active" {
@@ -74,7 +88,6 @@ func (cmd *MkImageCmd) Run() error {
 		os.Exit(1)
 	}
 
-	signer, err := sshconn.GetSigner(cfg.PrivateKeyFilename)
 	connected := false
 	var conn *sshconn.SSHConn
 	for i := 0; i < maxConnectAttempts; i++ {
@@ -108,8 +121,12 @@ func (cmd *MkImageCmd) Run() error {
 	fmt.Printf("Waiting for droplet to power down...")
 	for dropletObj.Status != "off" {
 		time.Sleep(time.Second * 5)
-		fmt.Println("Checking droplet status...")
+		fmt.Print("Checking droplet status...")
 		dropletObj, err = droplet.GetByID(doSvc, dropletObj.ID)
+		if err != nil {
+			return err
+		}
+		fmt.Println(dropletObj.Status)
 	}
 
 	fmt.Println("Droplet powered down, creating snapshot")
@@ -121,11 +138,12 @@ func (cmd *MkImageCmd) Run() error {
 
 	for actionObj.Status != "completed" {
 		time.Sleep(time.Second * 5)
-		fmt.Println("Checking action status...")
+		fmt.Print("Checking action status...")
 		actionObj, err = action.Get(doSvc, actionObj.ID)
 		if err != nil {
 			return err
 		}
+		fmt.Println(actionObj.Status)
 	}
 
 	fmt.Println("Snapshot complete")
@@ -141,7 +159,7 @@ func (cmd *MkImageCmd) Run() error {
 		return err
 	}
 
-	fmt.Println("Deleting droplet")
+	fmt.Print("Deleting droplet...")
 	err = droplet.Delete(doSvc, dropletObj.ID)
 	if err != nil {
 		return err

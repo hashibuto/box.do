@@ -1,21 +1,30 @@
 package sshconn
 
 import (
-	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 )
 
 type SSHConn struct {
-	Conn *ssh.Client
+	Conn      *ssh.Client
+	SSHSigner *SSHSigner
+}
+
+type SSHSigner struct {
+	Conn   net.Conn
+	Signer ssh.Signer
 }
 
 // GetSigner returns an SSH signer object for use with SSH connections
-func GetSigner(privkeyFilename string) (ssh.Signer, error) {
+func GetSigner(privkeyFilename string) (*SSHSigner, error) {
 	var signer ssh.Signer
 	var err error
 	keyData, err := ioutil.ReadFile(privkeyFilename)
@@ -25,36 +34,60 @@ func GetSigner(privkeyFilename string) (ssh.Signer, error) {
 
 	signer, err = ssh.ParsePrivateKey(keyData)
 	if _, ok := err.(*ssh.PassphraseMissingError); ok == true {
-		for {
-			var input string
-			fmt.Print("Enter your SSH key passphrase\n>")
-			reader := bufio.NewReader(os.Stdin)
-			input, err = reader.ReadString('\n')
-			if err != nil {
-				return nil, err
-			}
+		pubkeyFilename := fmt.Sprintf("%v.pub", privkeyFilename)
+		pubkeyData, err := ioutil.ReadFile(pubkeyFilename)
+		if err != nil {
+			fmt.Println("Unable to locate corresponding public key file", pubkeyFilename)
+			return nil, err
+		}
+		pubKey, _, _, _, err := ssh.ParseAuthorizedKey(pubkeyData)
+		myPubKeyBlob := pubKey.Marshal()
+		if err != nil {
+			return nil, err
+		}
 
-			// Trim any leading or trailing whitespace, including the delimiter
-			input = strings.Trim(input, " \n\t")
-			signer, err = ssh.ParsePrivateKeyWithPassphrase(keyData, []byte(input))
-			if err == nil {
-				break
+		socket := os.Getenv("SSH_AUTH_SOCK")
+		if socket == "" {
+			return nil, errors.New("No SSH agent available to process encrypted private key")
+		}
+		conn, err := net.Dial("unix", socket)
+		if err != nil {
+			return nil, err
+		}
+		agentClient := agent.NewClient(conn)
+		signers, err := agentClient.Signers()
+		if err != nil {
+			return nil, err
+		}
+		for _, signer = range signers {
+			signerPubKey := signer.PublicKey()
+			blob := signerPubKey.Marshal()
+			if bytes.Compare(blob, myPubKeyBlob) == 0 {
+				return &SSHSigner{
+					Signer: signer,
+					Conn:   conn,
+				}, nil
 			}
 		}
+
+		return nil, errors.New("This key is not being managed by the SSH agent")
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	return signer, nil
+	return &SSHSigner{
+		Signer: signer,
+		Conn:   nil,
+	}, nil
 }
 
 // NewSSHConn returns a new SSH connection
-func NewSSHConn(signer ssh.Signer, username, hostname string) (*SSHConn, error) {
+func NewSSHConn(signer *SSHSigner, username, hostname string) (*SSHConn, error) {
 	config := &ssh.ClientConfig{
 		User: username,
 		Auth: []ssh.AuthMethod{
-			ssh.PublicKeys(signer),
+			ssh.PublicKeys(signer.Signer),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // Yes, this is a bad practice
 	}
@@ -65,7 +98,8 @@ func NewSSHConn(signer ssh.Signer, username, hostname string) (*SSHConn, error) 
 	}
 
 	return &SSHConn{
-		Conn: conn,
+		Conn:      conn,
+		SSHSigner: signer,
 	}, nil
 }
 
@@ -88,4 +122,7 @@ func (conn *SSHConn) Run(commands []string) error {
 // Close closes the underlying SSH connection
 func (conn *SSHConn) Close() {
 	conn.Conn.Close()
+	if conn.SSHSigner.Conn != nil {
+		conn.SSHSigner.Conn.Close()
+	}
 }
