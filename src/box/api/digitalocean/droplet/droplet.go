@@ -24,6 +24,7 @@ type Droplet struct {
 	Networks    struct {
 		V4 []Address `json:"v4"`
 	} `json:"networks"`
+	VolumeIds []string `json:"volume_ids"`
 }
 
 type createFromPublicImageRequest struct {
@@ -99,8 +100,8 @@ func CreateFromPrivateImage(svc *digitalocean.Service, name, size, region string
 	return create(svc, reqBody)
 }
 
-// GetByID returns a droplet object for the provided droplet ID
-func GetByID(svc *digitalocean.Service, dropletID int) (*Droplet, error) {
+// Get returns a droplet object for the provided droplet ID
+func Get(svc *digitalocean.Service, dropletID int) (*Droplet, error) {
 	respBody, err := svc.Get(fmt.Sprintf("%v/%v", basePath, dropletID))
 	if err != nil {
 		return nil, err

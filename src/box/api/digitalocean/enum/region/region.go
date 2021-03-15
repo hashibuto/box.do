@@ -2,31 +2,31 @@ package region
 
 // DigitalOcean region slugs
 const (
-	NYC1 = "NYC1"
-	NYC2 = "NYC2"
-	NYC3 = "NYC3"
-	AMS2 = "AMS2"
-	AMS3 = "AMS3"
-	SFO1 = "SFO1"
-	SFO2 = "SFO2"
-	SFO3 = "SFO3"
-	SGP1 = "SGP1"
-	LON1 = "LON1"
-	FRA1 = "FRA1"
-	TOR1 = "TOR1"
-	BLR1 = "BLR1"
+	NYC1 = "nyc1"
+	NYC2 = "nyc2"
+	NYC3 = "nyc3"
+	AMS2 = "ams2"
+	AMS3 = "ams3"
+	SFO1 = "sfo1"
+	SFO2 = "sfo2"
+	SFO3 = "sfo3"
+	SGP1 = "sgp1"
+	LON1 = "lon1"
+	FRA1 = "fra1"
+	TOR1 = "tor1"
+	BLR1 = "blr1"
 )
 
 // Mapping between slug and city/content name
 var prefixToName map[string]string = map[string]string{
-	"NYC": "New York City, North America",
-	"AMS": "Amsterdam, Europe",
-	"SFO": "San Francisco, North America",
-	"SGP": "Singapore, Asia",
-	"LON": "London, Europe",
-	"FRA": "Frankfurt, Europe",
-	"TOR": "Toronto, North America",
-	"BLR": "Bangalore, Asia",
+	"nyc": "New York City, North America",
+	"ams": "Amsterdam, Europe",
+	"sfo": "San Francisco, North America",
+	"sgp": "Singapore, Asia",
+	"lon": "London, Europe",
+	"fra": "Frankfurt, Europe",
+	"tor": "Toronto, North America",
+	"blr": "Bangalore, Asia",
 }
 
 var regionToName map[string]string

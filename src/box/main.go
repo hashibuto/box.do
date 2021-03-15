@@ -17,7 +17,7 @@ func main() {
 	ctx := kong.Parse(&cli)
 	err := ctx.Run()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("\n%v\n", err)
 		os.Exit(1)
 	}
 }

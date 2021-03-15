@@ -35,6 +35,7 @@ type Config struct {
 	BlockStorageID     string
 	DropletID          int
 	DropletPublicIP    string
+	FirewallID         string
 }
 
 const defaultRegion = region.NYC3

@@ -62,7 +62,7 @@ func (cmd *MkImageCmd) Run() error {
 	for dropletObj.Status == "new" {
 		time.Sleep(time.Second * 5)
 		fmt.Print("Checking droplet status...")
-		dropletObj, err = droplet.GetByID(doSvc, dropletObj.ID)
+		dropletObj, err = droplet.Get(doSvc, dropletObj.ID)
 		if err != nil {
 			return err
 		}
@@ -122,7 +122,7 @@ func (cmd *MkImageCmd) Run() error {
 	for dropletObj.Status != "off" {
 		time.Sleep(time.Second * 5)
 		fmt.Print("Checking droplet status...")
-		dropletObj, err = droplet.GetByID(doSvc, dropletObj.ID)
+		dropletObj, err = droplet.Get(doSvc, dropletObj.ID)
 		if err != nil {
 			return err
 		}
@@ -148,7 +148,7 @@ func (cmd *MkImageCmd) Run() error {
 
 	fmt.Println("Snapshot complete")
 
-	dropletObj, err = droplet.GetByID(doSvc, dropletObj.ID)
+	dropletObj, err = droplet.Get(doSvc, dropletObj.ID)
 	if err != nil {
 		return err
 	}
