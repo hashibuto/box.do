@@ -1,9 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"os"
-
 	"box/config"
 )
 
@@ -12,22 +9,10 @@ type InitCmd struct {
 }
 
 func (cmd *InitCmd) Run() error {
-	configDir, err := config.GetConfigDir()
+	_, err := config.New(cmd.Name)
 	if err != nil {
 		return err
 	}
 
-	// Read, write, execute by this user only
-	err = os.MkdirAll(configDir, os.FileMode(0700))
-	if err != nil {
-		return err
-	}
-
-	config, err := config.New(cmd.Name)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(config)
 	return nil
 }

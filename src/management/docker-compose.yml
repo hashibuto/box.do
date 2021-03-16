@@ -4,8 +4,8 @@ version: "3.8"
 services:
   docker-registry:
     restart: always
-    hostname: registry
-    container_name: registry
+    hostname: box-registry
+    container_name: box-registry
     image: registry:2.7.1
     ports:
       # Map to localhost port 5000 for SSH tunnel port forwarding
@@ -16,9 +16,10 @@ services:
       # Host mount registry storage area under block storage mount
       - /mnt/datavol/registry:/var/lib/registry
 
-  nginx:
+  router:
     restart: always
-    hostname: nginx
+    hostname: box-router
+    image: box-router
     container_name: ${NGINX_CONTAINER_NAME}
     environment:
       DOMAIN_NAME: ${DOMAIN_NAME}
@@ -33,7 +34,8 @@ services:
 
   cron:
     restart: always
-    container_name: cron
+    container_name: box-cron
+    image: box-cron
     environment:
       DOMAIN_NAME: ${DOMAIN_NAME}
       EMAIL: ${EMAIL}

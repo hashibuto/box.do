@@ -11,6 +11,7 @@ var cli struct {
 	Init     InitCmd       `cmd help="Initializes a new project"`
 	Mkimage  MkImageCmd    `cmd help="Make DigitalOcean base image"`
 	Mkremote MakeRemoteCmd `cmd help="Provision remote host and respective resources"`
+	Dev      DevCmd        `cmd help="Run box project in development mode"`
 }
 
 func main() {

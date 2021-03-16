@@ -19,6 +19,9 @@ import (
 )
 
 const configDirName = ".box.do"
+const configFileName = "config.yml"
+
+var ProjectNameRe *regexp.Regexp = regexp.MustCompile("^([a-z][a-z0-9\\-]+[a-z0-9]){3,20}$")
 
 // Config holds the project configuration
 type Config struct {
@@ -62,10 +65,6 @@ func GetConfigDir() (string, error) {
 	return fullConfigPath, nil
 }
 
-func getConfigFilename(projectName string) string {
-	return fmt.Sprintf("%v.yml", projectName)
-}
-
 // getTextInput prompts the user for a single line of input, then validates said input.
 // if validation fails, then the user is prompted again (this loop continues until input is valid).
 func getTextInput(prompt string, validationFunc func(string) bool) (string, error) {
@@ -91,6 +90,12 @@ func getTextInput(prompt string, validationFunc func(string) bool) (string, erro
 
 // New returns a new config struct based on user input
 func New(projectName string) (*Config, error) {
+	if !ProjectNameRe.Match([]byte(projectName)) {
+		return nil, fmt.Errorf(
+			"Project name must only contain lowercase alpha, numbers, or hyphens.  It must begin with an alpha character, and may not end with a hyphen.  Project names must be between 3 and 20 characters long.",
+		)
+	}
+
 	config := Config{ProjectName: projectName}
 
 	apiKey, err := getTextInput(
@@ -220,7 +225,14 @@ func New(projectName string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	configFilePath := path.Join(configDir, getConfigFilename(projectName))
+
+	projectDir := path.Join(configDir, projectName)
+	os.MkdirAll(projectDir, os.FileMode(0700))
+	configFilePath := path.Join(
+		configDir,
+		projectName,
+		configFileName,
+	)
 
 	doSvc := digitalocean.NewService(apiKey)
 	createdKey, err := sshkeys.Create(doSvc, fmt.Sprintf("box-key-%v", strings.ToLower(projectName)), string(pbkData))
@@ -251,7 +263,11 @@ func Load(projectName string) (*Config, error) {
 		return nil, err
 	}
 
-	configFilePath := path.Join(configDir, getConfigFilename(projectName))
+	configFilePath := path.Join(
+		configDir,
+		projectName,
+		configFileName,
+	)
 
 	configData, err := ioutil.ReadFile(configFilePath)
 	if err != nil {
@@ -273,7 +289,11 @@ func (cfg *Config) Save() error {
 	if err != nil {
 		return err
 	}
-	configFilePath := path.Join(configDir, getConfigFilename(cfg.ProjectName))
+	configFilePath := path.Join(
+		configDir,
+		cfg.ProjectName,
+		configFileName,
+	)
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return err
