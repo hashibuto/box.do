@@ -1,0 +1,49 @@
+project: example
+services:
+
+  redis:
+    hostname: redis
+    image: redis:6.2.1-alpine
+
+  postgres:
+    hostname: postgres
+    image: postgres:13.2-alpine
+    volumes:
+      - '@/pgdata:/var/lib/postgresql/data'
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+
+  auth:
+    image: '@/auth'
+    build:
+      dockerfile: ./Dockerfile
+      context: ./auth
+    environment:
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    routing:
+      path:
+        pattern: /api/auth
+        type: prefix    # prefix, exact, regex
+      port: 80          # this must match the listening port in the container
+
+  frontend:
+    runtime_env: dev
+    build:
+      dockerfile: ./Dockerfile
+      context: ./frontend
+    routing:
+      path:
+        pattern: /
+        type: prefix
+      port: 3000
+
+static_routes:
+  webroot: '@/www'
+  paths:
+    - pattern: /
+      type: prefix
+      location: /

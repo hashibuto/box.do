@@ -3,10 +3,14 @@ package runtime
 import (
 	"box/config"
 	"box/manifest"
+	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path"
+	"strings"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 
 	"gopkg.in/yaml.v2"
@@ -20,6 +24,8 @@ type runData struct {
 
 type Runtime struct {
 	Manifest *manifest.Manifest
+	Client   *client.Client
+	Context  context.Context
 }
 
 var routerService manifest.Service = manifest.Service{
@@ -46,8 +52,20 @@ var registryService manifest.Service = manifest.Service{
 	},
 }
 
+var cronService manifest.Service = manifest.Service{
+	Image: "hashibuto/box-cron",
+	Volumes: []string{
+		"@/letsencrypt:/etc/letsencrypt",
+		"@/www/acme:/var/www/acme",
+		"/var/run/docker.sock:/var/run/docker.sock",
+	},
+}
+
+// All box managed containers will start with this prefix
+const boxContainerPrefix = "box__"
+
 // New returns a new instance of the runtime structure for the supplied project
-func New(manifestFilename string, isProduction bool) (*Runtime, error) {
+func New(mfst *manifest.Manifest, isProduction bool) (*Runtime, error) {
 	// Basically we want this to behave as a singleton, which will disrupt any existing
 	// runtime that's running against a different project name (one at a time only).
 	if isInitialized == true {
@@ -58,20 +76,16 @@ func New(manifestFilename string, isProduction bool) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := ioutil.ReadFile(path.Join(configDir, ".run.yml"))
-	if err != nil {
-		return nil, err
-	}
-	runInfo := runData{}
-	err = yaml.Unmarshal(data, &runInfo)
-	if err != nil {
-		// If the YAML can't be parsed, revert back to the empty structure but ignore the error
-		runInfo = runData{}
-	}
 
-	mfst, err := manifest.NewManifest(manifestFilename)
-	if err != nil {
-		return nil, err
+	runInfo := runData{}
+	runFilename := path.Join(configDir, ".run.yml")
+	data, err := ioutil.ReadFile(runFilename)
+	if err == nil {
+		err = yaml.Unmarshal(data, &runInfo)
+		if err != nil {
+			// If the YAML can't be parsed, revert back to the empty structure but ignore the error
+			runInfo = runData{}
+		}
 	}
 
 	cli, err := client.NewEnvClient()
@@ -80,12 +94,43 @@ func New(manifestFilename string, isProduction bool) (*Runtime, error) {
 	}
 
 	if runInfo.Project != mfst.Project {
-		// The previous running project was not this project, so kill all of the management containers
+		oldContainerIDs := []string{}
 
+		// The previous running project was not this project, so kill all of the management containers
+		ctx := context.Background()
+		containers, err := cli.ContainerList(ctx, types.ContainerListOptions{})
+		if err != nil {
+			return nil, err
+		}
+
+		for _, container := range containers {
+			for _, name := range container.Names {
+				if strings.HasPrefix(name, boxContainerPrefix) {
+					oldContainerIDs = append(oldContainerIDs, container.ID)
+					break
+				}
+			}
+		}
+
+		if len(oldContainerIDs) > 0 {
+			return nil, fmt.Errorf("The project \"%v\" is still running, please stop it before running another project.\n", runInfo.Project)
+		}
+	}
+
+	runInfo.Project = mfst.Project
+	outBytes, err := yaml.Marshal(&runInfo)
+	if err != nil {
+		return nil, err
+	}
+	err = ioutil.WriteFile(runFilename, outBytes, os.FileMode(0600))
+	if err != nil {
+		return nil, err
 	}
 
 	isInitialized = true
 	return &Runtime{
 		Manifest: mfst,
+		Client:   cli,
+		Context:  context.Background(),
 	}, nil
 }

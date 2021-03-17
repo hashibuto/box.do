@@ -3,6 +3,7 @@ package manifest
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"regexp"
 
 	"gopkg.in/yaml.v2"
@@ -34,11 +35,12 @@ type Service struct {
 }
 
 type Manifest struct {
-	Project  string             `yaml:"project"`
-	Services map[string]Service `yaml:"services"`
+	Project    string             `yaml:"project"`
+	Services   map[string]Service `yaml:"services"`
+	RuntimeEnv string             `yaml:"runtime_env"`
 }
 
-var hostnameRe *regexp.Regexp = regexp.MustCompile("([a-z]+){3-20}")
+var hostnameRe *regexp.Regexp = regexp.MustCompile("([a-z]+){3,20}")
 
 func validateHostname(hostname string) error {
 	if hostname == "" {
@@ -60,6 +62,9 @@ func validateHostname(hostname string) error {
 func NewManifest(filename string) (*Manifest, error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
+		if _, ok := err.(*os.PathError); ok {
+			return nil, fmt.Errorf("Unable to locate manifest at %v", filename)
+		}
 		return nil, err
 	}
 
