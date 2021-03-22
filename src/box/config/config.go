@@ -20,6 +20,7 @@ import (
 
 const configDirName = ".box.do"
 const configFileName = "config.yml"
+const dataDirName = "data"
 
 var ProjectNameRe *regexp.Regexp = regexp.MustCompile("^([a-z][a-z0-9\\-]+[a-z0-9]){3,20}$")
 
@@ -226,8 +227,9 @@ func New(projectName string) (*Config, error) {
 		return nil, err
 	}
 
-	projectDir := path.Join(configDir, projectName)
-	os.MkdirAll(projectDir, os.FileMode(0700))
+	dataDir := path.Join(configDir, projectName, dataDirName)
+	os.MkdirAll(dataDir, os.FileMode(0755))
+
 	configFilePath := path.Join(
 		configDir,
 		projectName,
@@ -300,4 +302,16 @@ func (cfg *Config) Save() error {
 	}
 	err = ioutil.WriteFile(configFilePath, data, os.FileMode(0600))
 	return err
+}
+
+// DataDir returns the full path to the data directory which serves as the bind mount root
+func (cfg *Config) DataDir() (string, error) {
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return "", err
+	}
+
+	dataDir := path.Join(configDir, cfg.ProjectName, dataDirName)
+
+	return dataDir, nil
 }
