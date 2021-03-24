@@ -11,6 +11,11 @@ import (
 
 const LocalImagePrefix = "@/"
 
+type BuildInfo struct {
+	Context    string `yaml:"context"`
+	Dockerfile string `yaml:"dockerfile"`
+}
+
 type Service struct {
 	Name        string
 	Hostname    string            `yaml:"hostname"`
@@ -20,6 +25,7 @@ type Service struct {
 	Image       string            `yaml:"image"`
 	DependsOn   []string          `yaml:"depends_on"`
 	Ports       []string          `yaml:"ports"`
+	Build       BuildInfo         `yaml:"build"`
 }
 
 func (svc *Service) GetHostname() string {

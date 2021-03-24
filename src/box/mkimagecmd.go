@@ -5,14 +5,18 @@ import (
 	"box/api/digitalocean/action"
 	"box/api/digitalocean/droplet"
 	dropletenum "box/api/digitalocean/enum/droplet"
+	"box/api/digitalocean/snapshot"
 	"box/config"
 	"box/sshconn"
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 )
 
 const imageHostName = "box-image-maker"
+const baseImageName = "box-base"
 const maxConnectAttempts = 10
 const sshRetrySeconds = 10
 const configRepo = "box.do-config"
@@ -38,6 +42,46 @@ func (cmd *MkImageCmd) Run() error {
 		os.Exit(1)
 	}
 
+	doSvc := digitalocean.NewService(cfg.DigitalOceanAPIKey)
+
+	if cfg.ImageID != 0 {
+		// Delete the existing image
+		fmt.Printf("Deleting existing image...")
+		err = snapshot.Delete(doSvc, strconv.Itoa(cfg.ImageID))
+		if err != nil {
+			var respErr *digitalocean.RespError
+			if errors.As(err, &respErr) {
+				// A 404 is OK, anything else is no good
+				if respErr.StatusCode != 404 {
+					return respErr
+				}
+
+				fmt.Println("Not found")
+			}
+		} else {
+			fmt.Println("Done")
+		}
+	}
+
+	fmt.Printf("Checking DigitalOcean account for an existing image...")
+	snapshots, err := snapshot.GetAllDropletSnapshots(doSvc)
+	if err != nil {
+		return err
+	}
+
+	for _, snapshot := range snapshots {
+		if snapshot.Name == baseImageName {
+			fmt.Println("Found")
+			cfg.ImageID, err = strconv.Atoi(snapshot.ID)
+			if err != nil {
+				return fmt.Errorf("Unable to convert snapshot ID to int: %w", err)
+			}
+			err = cfg.Save()
+			return err
+		}
+	}
+	fmt.Println("Not found")
+
 	// Obtain the SSH signer first in order to avoid creating unnecessary resources, should this process fail
 	signer, err := sshconn.GetSigner(cfg.PrivateKeyFilename)
 	if err != nil {
@@ -45,7 +89,6 @@ func (cmd *MkImageCmd) Run() error {
 	}
 
 	fmt.Print("Creating new droplet for base image...")
-	doSvc := digitalocean.NewService(cfg.DigitalOceanAPIKey)
 	dropletObj, err = droplet.CreateFromPublicImage(
 		doSvc,
 		imageHostName,
@@ -68,6 +111,9 @@ func (cmd *MkImageCmd) Run() error {
 		}
 		fmt.Println(dropletObj.Status)
 	}
+
+	// Get this ready for deletion in case the command fails (also delete if the command doesn't fail)
+	defer deleteDroplet(doSvc, dropletObj.ID)
 
 	if dropletObj.Status != "active" {
 		fmt.Printf("Droplet creation failed, please be sure to remove the droplet named %v from your DigitalOcean control panel\n", imageHostName)
@@ -131,7 +177,7 @@ func (cmd *MkImageCmd) Run() error {
 
 	fmt.Println("Droplet powered down, creating snapshot")
 
-	actionObj, err := droplet.CreateSnapshot(doSvc, dropletObj.ID, "box-base")
+	actionObj, err := droplet.CreateSnapshot(doSvc, dropletObj.ID, baseImageName)
 	if err != nil {
 		return err
 	}
@@ -159,11 +205,16 @@ func (cmd *MkImageCmd) Run() error {
 		return err
 	}
 
+	return nil
+}
+
+func deleteDroplet(doSvc *digitalocean.Service, dropletID int) {
 	fmt.Print("Deleting droplet...")
-	err = droplet.Delete(doSvc, dropletObj.ID)
+	err := droplet.Delete(doSvc, dropletID)
 	if err != nil {
-		return err
+		fmt.Println("Failed")
+		fmt.Println("Wasn't able to delete droplet, please ensure you delete it in your DigitalOcean control panel")
+	} else {
+		fmt.Println("Done")
 	}
-	fmt.Println("Done")
-	return err
 }

@@ -3,10 +3,12 @@ package sshkeys
 import (
 	"box/api/digitalocean"
 	"encoding/json"
+	"fmt"
 )
 
 type SSHKey struct {
-	ID int `json:"id"`
+	ID        int    `json:"id"`
+	PublicKey string `json:"public_key"`
 }
 
 type createBody struct {
@@ -43,4 +45,22 @@ func Create(svc *digitalocean.Service, name string, publicKey string) (*SSHKey, 
 	}
 
 	return &createdKey.SSHKey, nil
+}
+
+// GetAll retrieves all SSH keys in the account.  Lists up to 200 results.
+func GetAll(svc *digitalocean.Service) ([]SSHKey, error) {
+	respBody, err := svc.Get(fmt.Sprintf("%v?per_page=200", basePath))
+	if err != nil {
+		return nil, fmt.Errorf("sshkeys.GetAll: %w", err)
+	}
+
+	keys := struct {
+		SSHKeys []SSHKey `json:"ssh_keys"`
+	}{}
+	err = json.Unmarshal(respBody, &keys)
+	if err != nil {
+		return nil, fmt.Errorf("sshkeys.GetAll: %w", err)
+	}
+
+	return keys.SSHKeys, nil
 }

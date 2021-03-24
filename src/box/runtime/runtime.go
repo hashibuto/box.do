@@ -243,9 +243,19 @@ func (rt *Runtime) Start() error {
 		coreServices = devServices
 	}
 
+	allServices := []manifest.Service{}
+	for _, service := range coreServices {
+		allServices = append(allServices, service)
+	}
+	for _, service := range rt.Manifest.Services {
+		allServices = append(allServices, service)
+	}
+
 	containerBodyByServiceName := map[string]container.ContainerCreateCreatedBody{}
 	var createErr error
-	for _, service := range coreServices {
+
+	// Create all the services
+	for _, service := range allServices {
 		hostname := service.GetHostname()
 		containerName := fmt.Sprint("%v%v", boxContainerPrefix, service.Name)
 
@@ -318,13 +328,21 @@ func (rt *Runtime) Start() error {
 		return fmt.Errorf("An error occurred while creating containers")
 	}
 
-	tranches, err := makeDependencyTranches(coreServices)
+	serviceTranches, err := makeDependencyTranches(coreServices)
 	if err != nil {
 		return err
 	}
+
+	// Add the core services as the first tranche
+	tranches := []tranche{}
+	tranches = append(tranches, tranche(coreServices))
+	for _, tranche := range serviceTranches {
+		tranches = append(tranches, tranche)
+	}
+
 	for _, tranche := range tranches {
 
-		// All containers in a tranche get started together, each in a separate thread.
+		// All containers in a tranche get started together, each in a separate goroutine.
 		group := new(errgroup.Group)
 		for _, service := range tranche {
 
@@ -347,6 +365,19 @@ func (rt *Runtime) Start() error {
 			}
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (rt *Runtime) Build() error {
+	dir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("runtime.Build: %w", err)
+	}
+
+	for serviceName, service := range rt.Manifest.Services {
+		if service.Build.Context != ""
 	}
 
 	return nil

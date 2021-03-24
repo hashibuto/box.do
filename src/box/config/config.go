@@ -22,7 +22,7 @@ const configDirName = ".box.do"
 const configFileName = "config.yml"
 const dataDirName = "data"
 
-var ProjectNameRe *regexp.Regexp = regexp.MustCompile("^([a-z][a-z0-9\\-]+[a-z0-9]){3,20}$")
+var ProjectNameRe *regexp.Regexp = regexp.MustCompile("^[a-z][a-z0-9\\-]{1,18}[a-z0-9]$")
 
 // Config holds the project configuration
 type Config struct {
@@ -47,6 +47,21 @@ const defaultDroplet = droplet.S2VCPU2GB
 
 // https://golangcode.com/validate-an-email-address/
 var emailRegex = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+
+// CheckProjectExists returns a boolean, indicating whether or not the project exists
+func CheckProjectExists(projectName string) (bool, error) {
+	dirName, err := GetConfigDir()
+	if err != nil {
+		return false, fmt.Errorf("config.CheckProjectExists: %w", err)
+	}
+
+	projectDir := path.Join(dirName, projectName)
+	if _, err := os.Stat(projectDir); err != nil {
+		return false, nil
+	}
+
+	return true, nil
+}
 
 func isEmailValid(e string) bool {
 	if len(e) < 3 && len(e) > 254 {
@@ -95,6 +110,14 @@ func New(projectName string) (*Config, error) {
 		return nil, fmt.Errorf(
 			"Project name must only contain lowercase alpha, numbers, or hyphens.  It must begin with an alpha character, and may not end with a hyphen.  Project names must be between 3 and 20 characters long.",
 		)
+	}
+
+	exists, err := CheckProjectExists(projectName)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, fmt.Errorf("A project already exists by the name: %v", projectName)
 	}
 
 	config := Config{ProjectName: projectName}
@@ -237,13 +260,33 @@ func New(projectName string) (*Config, error) {
 	)
 
 	doSvc := digitalocean.NewService(apiKey)
-	createdKey, err := sshkeys.Create(doSvc, fmt.Sprintf("box-key-%v", strings.ToLower(projectName)), string(pbkData))
+	fmt.Printf("Checking for an existing matching SSH public key...")
+	keys, err := sshkeys.GetAll(doSvc)
 	if err != nil {
-		fmt.Println("Unable to post new SSH public key to DigitalOcean")
 		return nil, err
 	}
+	strKey := strings.Trim(string(pbkData), " \n\t")
+	var publicKeyID int
+	for _, key := range keys {
+		if key.PublicKey == strKey {
+			publicKeyID = key.ID
+			break
+		}
+	}
 
-	config.PublicKeyID = createdKey.ID
+	if publicKeyID == 0 {
+		fmt.Println("Not found")
+		createdKey, err := sshkeys.Create(doSvc, fmt.Sprintf("box-key-%v", strings.ToLower(projectName)), strKey)
+		if err != nil {
+			fmt.Println("Unable to post new SSH public key to DigitalOcean")
+			return nil, err
+		}
+
+		config.PublicKeyID = createdKey.ID
+	} else {
+		fmt.Println("Found")
+		config.PublicKeyID = publicKeyID
+	}
 
 	configBytes, err := yaml.Marshal(&config)
 	if err != nil {
@@ -254,6 +297,8 @@ func New(projectName string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Unable to write configuration file %v", configFilePath)
 	}
+
+	fmt.Println("All done!")
 
 	return &config, nil
 }

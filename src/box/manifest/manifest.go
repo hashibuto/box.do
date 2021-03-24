@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
+	"path/filepath"
 	"regexp"
 
 	"gopkg.in/yaml.v2"
@@ -36,14 +38,15 @@ var portsMappingRe *regexp.Regexp = regexp.MustCompile("^\\d+:\\d+$")
 // Trivial rejector for non bind mount style volumes
 var volumeMappingRe *regexp.Regexp = regexp.MustCompile("^[/.@][^:]*:/[^:]*$")
 
-func validateHostname(hostname string) error {
+func validateHostname(service, hostname string) error {
 	if hostname == "" {
 		return nil
 	}
 
 	if !hostnameRe.Match([]byte(hostname)) {
 		return fmt.Errorf(
-			"Hostname \"%v\" must contain only lowercase alpha characters, and be between 3 and 20 characters long",
+			"Service: %v\nHostname \"%v\" must contain only lowercase alpha characters, and be between 3 and 20 characters long",
+			service,
 			hostname,
 		)
 	}
@@ -51,10 +54,11 @@ func validateHostname(hostname string) error {
 	return nil
 }
 
-func validatePort(port string) error {
+func validatePort(service, port string) error {
 	if !portsMappingRe.Match([]byte(port)) {
 		return fmt.Errorf(
-			"Port mapping %v is incorrect, mappings must be in the form of <host_port>:<container_port>",
+			"Service: %v\nPort mapping %v is incorrect, mappings must be in the form of <host_port>:<container_port>",
+			service,
 			port,
 		)
 	}
@@ -62,9 +66,52 @@ func validatePort(port string) error {
 	return nil
 }
 
-func validateVolume(volume string) error {
+func validateVolume(service, volume string) error {
 	if !volumeMappingRe.Match([]byte(volume)) {
-		return fmt.Errorf("Volume \"%v\" is invalid.  Only bind mount volumes are supported.  Eg: /var/log/mylogs:/var/log/something", volume)
+		return fmt.Errorf(
+			"Service: %v\nVolume \"%v\" is invalid.  Only bind mount volumes are supported.  Eg: /var/log/mylogs:/var/log/something",
+			service,
+			volume,
+		)
+	}
+
+	return nil
+}
+
+func validateBuildInfo(service string, bi *BuildInfo) error {
+	if bi.Context == "" && bi.Dockerfile == "" {
+		return nil
+	}
+
+	dir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("manifest.validateBuildInfo: %w", err)
+	}
+
+	contextPath, err := filepath.Abs(path.Join(dir, bi.Context))
+	if err != nil {
+		return fmt.Errorf("manifest.validateBuildInfo: %w", err)
+	}
+
+	if _, err := os.Stat(contextPath); err != nil {
+		return fmt.Errorf(
+			"Service: %v\nUnable to locate build context path: %w",
+			service,
+			err,
+		)
+	}
+
+	dockerfilePath, err := filepath.Abs(path.Join(contextPath, bi.Dockerfile))
+	if err != nil {
+		return fmt.Errorf("manifest.validateBuildInfo: %w", err)
+	}
+
+	if _, err := os.Stat(dockerfilePath); err != nil {
+		return fmt.Errorf(
+			"Service: %v\nUnable to locate dockerfile path: %w",
+			service,
+			err,
+		)
 	}
 
 	return nil
@@ -90,7 +137,7 @@ func NewManifest(filename string) (*Manifest, error) {
 	// Validate services
 	for serviceName, service := range mfst.Services {
 		// Validate hostname
-		if err := validateHostname(service.Hostname); err != nil {
+		if err := validateHostname(serviceName, service.Hostname); err != nil {
 			return nil, err
 		}
 
@@ -100,15 +147,20 @@ func NewManifest(filename string) (*Manifest, error) {
 		}
 
 		for _, port := range service.Ports {
-			if err = validatePort(port); err != nil {
+			if err = validatePort(serviceName, port); err != nil {
 				return nil, err
 			}
 		}
 
 		for _, volume := range service.Volumes {
-			if err = validateVolume(volume); err != nil {
+			if err = validateVolume(serviceName, volume); err != nil {
 				return nil, err
 			}
+		}
+
+		err = validateBuildInfo(serviceName, &service.Build)
+		if err != nil {
+			return nil, err
 		}
 
 		service.Name = serviceName
