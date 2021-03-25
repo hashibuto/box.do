@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 
@@ -88,7 +87,7 @@ func validateBuildInfo(service string, bi *BuildInfo) error {
 		return fmt.Errorf("manifest.validateBuildInfo: %w", err)
 	}
 
-	contextPath, err := filepath.Abs(path.Join(dir, bi.Context))
+	contextPath, err := filepath.Abs(filepath.Join(dir, bi.Context))
 	if err != nil {
 		return fmt.Errorf("manifest.validateBuildInfo: %w", err)
 	}
@@ -101,7 +100,7 @@ func validateBuildInfo(service string, bi *BuildInfo) error {
 		)
 	}
 
-	dockerfilePath, err := filepath.Abs(path.Join(contextPath, bi.Dockerfile))
+	dockerfilePath, err := filepath.Abs(filepath.Join(contextPath, bi.Dockerfile))
 	if err != nil {
 		return fmt.Errorf("manifest.validateBuildInfo: %w", err)
 	}
@@ -112,6 +111,14 @@ func validateBuildInfo(service string, bi *BuildInfo) error {
 			service,
 			err,
 		)
+	}
+
+	return nil
+}
+
+func validateImage(serviceName, image string) error {
+	if image == "" {
+		return fmt.Errorf("Service: %v\nMust specify an image name", serviceName)
 	}
 
 	return nil
@@ -159,6 +166,11 @@ func NewManifest(filename string) (*Manifest, error) {
 		}
 
 		err = validateBuildInfo(serviceName, &service.Build)
+		if err != nil {
+			return nil, err
+		}
+
+		err = validateImage(serviceName, service.Image)
 		if err != nil {
 			return nil, err
 		}

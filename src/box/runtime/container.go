@@ -23,7 +23,7 @@ func (rt *Runtime) CreateContainer(service *manifest.Service) (*container.Contai
 	contConfig := container.Config{
 		Hostname:     hostname,
 		Env:          service.GetEnv(),
-		Image:        service.GetImage(),
+		Image:        service.GetImage(rt.Config.ProjectNameHash()),
 		ExposedPorts: service.GetContainerPortSet(),
 	}
 

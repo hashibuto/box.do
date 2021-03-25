@@ -6,11 +6,12 @@ import (
 	"box/api/digitalocean/enum/region"
 	"box/api/digitalocean/sshkeys"
 	"bufio"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -40,6 +41,7 @@ type Config struct {
 	DropletID          int
 	DropletPublicIP    string
 	FirewallID         string
+	projNameHash       string
 }
 
 const defaultRegion = region.NYC3
@@ -55,7 +57,7 @@ func CheckProjectExists(projectName string) (bool, error) {
 		return false, fmt.Errorf("config.CheckProjectExists: %w", err)
 	}
 
-	projectDir := path.Join(dirName, projectName)
+	projectDir := filepath.Join(dirName, projectName)
 	if _, err := os.Stat(projectDir); err != nil {
 		return false, nil
 	}
@@ -77,7 +79,7 @@ func GetConfigDir() (string, error) {
 		return "", errors.New("Unable to determine user's home directory")
 	}
 
-	fullConfigPath := path.Join(homeDir, configDirName)
+	fullConfigPath := filepath.Join(homeDir, configDirName)
 	return fullConfigPath, nil
 }
 
@@ -213,7 +215,7 @@ func New(projectName string) (*Config, error) {
 	config.Email = email
 
 	homeDir, _ := os.UserHomeDir()
-	defaultKeyFile := path.Join(homeDir, ".ssh", "id_rsa")
+	defaultKeyFile := filepath.Join(homeDir, ".ssh", "id_rsa")
 	pkFilename, err := getTextInput(
 		fmt.Sprintf("Private key full path (Enter for default %v)", defaultKeyFile),
 		func(value string) bool {
@@ -250,10 +252,10 @@ func New(projectName string) (*Config, error) {
 		return nil, err
 	}
 
-	dataDir := path.Join(configDir, projectName, dataDirName)
+	dataDir := filepath.Join(configDir, projectName, dataDirName)
 	os.MkdirAll(dataDir, os.FileMode(0755))
 
-	configFilePath := path.Join(
+	configFilePath := filepath.Join(
 		configDir,
 		projectName,
 		configFileName,
@@ -310,7 +312,7 @@ func Load(projectName string) (*Config, error) {
 		return nil, err
 	}
 
-	configFilePath := path.Join(
+	configFilePath := filepath.Join(
 		configDir,
 		projectName,
 		configFileName,
@@ -336,7 +338,7 @@ func (cfg *Config) Save() error {
 	if err != nil {
 		return err
 	}
-	configFilePath := path.Join(
+	configFilePath := filepath.Join(
 		configDir,
 		cfg.ProjectName,
 		configFileName,
@@ -356,7 +358,18 @@ func (cfg *Config) DataDir() (string, error) {
 		return "", err
 	}
 
-	dataDir := path.Join(configDir, cfg.ProjectName, dataDirName)
+	dataDir := filepath.Join(configDir, cfg.ProjectName, dataDirName)
 
 	return dataDir, nil
+}
+
+// ProjectNameHash returns the first characters of the hex encoded SHA256 hash of the project name
+func (cfg *Config) ProjectNameHash() string {
+	if cfg.projNameHash == "" {
+		hash := sha256.New()
+		hash.Write([]byte(cfg.ProjectName))
+		cfg.projNameHash = fmt.Sprintf("%x", hash.Sum(nil))[:12]
+	}
+
+	return cfg.projNameHash
 }

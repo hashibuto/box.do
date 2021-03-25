@@ -6,7 +6,7 @@ import (
 	"box/runtime"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 )
 
 type BuildCmd struct {
@@ -18,7 +18,7 @@ func (cmd *BuildCmd) Run() error {
 		return err
 	}
 
-	manifestFilename := path.Join(dirName, "box.yml")
+	manifestFilename := filepath.Join(dirName, "box.yml")
 	fmt.Println("Loading run manifest")
 	mfst, err := manifest.NewManifest(manifestFilename)
 	if err != nil {

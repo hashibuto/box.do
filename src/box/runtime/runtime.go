@@ -1,13 +1,14 @@
 package runtime
 
 import (
+	"box/cmd"
 	"box/config"
 	"box/manifest"
 	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/docker/docker/api/types"
@@ -96,7 +97,7 @@ func New(mfst *manifest.Manifest, cfg *config.Config, isProduction bool) (*Runti
 	}
 
 	runInfo := runData{}
-	runFilename := path.Join(configDir, ".run.yml")
+	runFilename := filepath.Join(configDir, ".run.yml")
 	data, err := ioutil.ReadFile(runFilename)
 	if err == nil {
 		err = yaml.Unmarshal(data, &runInfo)
@@ -228,7 +229,7 @@ func (rt *Runtime) Shutdown() error {
 	if err != nil {
 		return err
 	}
-	runFilename := path.Join(configDir, ".run.yml")
+	runFilename := filepath.Join(configDir, ".run.yml")
 	err = os.Remove(runFilename)
 
 	return err
@@ -269,7 +270,7 @@ func (rt *Runtime) Start() error {
 		contConfig := container.Config{
 			Hostname:     hostname,
 			Env:          service.GetEnv(),
-			Image:        service.GetImage(),
+			Image:        service.GetImage(rt.Config.ProjectNameHash()),
 			ExposedPorts: service.GetContainerPortSet(),
 		}
 
@@ -377,7 +378,35 @@ func (rt *Runtime) Build() error {
 	}
 
 	for serviceName, service := range rt.Manifest.Services {
-		if service.Build.Context != ""
+		if service.Build.Context != "" {
+			fmt.Println("Building image for ", serviceName)
+			contextPath, err := filepath.Abs(filepath.Join(dir, service.Build.Context))
+			if err != nil {
+				return fmt.Errorf("runtime.Build: %w", err)
+			}
+			dockerfilePath := filepath.Join(contextPath, service.Build.Dockerfile)
+			dockerfileAbsPath, err := filepath.Abs(dockerfilePath)
+			if err != nil {
+				return fmt.Errorf("runtime.Build: %w", err)
+			}
+
+			image := service.GetImage(rt.Config.ProjectNameHash())
+			builder, err := cmd.New(
+				"docker",
+				"build",
+				"--file", dockerfileAbsPath,
+				"--tag", image,
+			)
+			if err != nil {
+				return fmt.Errorf("runtime.Build: %w", err)
+			}
+
+			builder.CWD = contextPath
+			err = builder.Run()
+			if err != nil {
+				return fmt.Errorf("Error building %v: %w", serviceName, err)
+			}
+		}
 	}
 
 	return nil

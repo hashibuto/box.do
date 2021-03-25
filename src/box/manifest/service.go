@@ -2,7 +2,7 @@ package manifest
 
 import (
 	"fmt"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/docker/docker/api/types/mount"
@@ -45,9 +45,10 @@ func (svc *Service) GetEnv() []string {
 	return envVars
 }
 
-func (svc *Service) GetImage() string {
+// GetImage returns the image, replacing any local reference with a unique project identifier
+func (svc *Service) GetImage(uniqueSuffix string) string {
 	if strings.HasPrefix(svc.Image, LocalImagePrefix) {
-		return svc.Image[len(LocalImagePrefix):]
+		return fmt.Sprintf("%v_%v", svc.Image[len(LocalImagePrefix):], uniqueSuffix)
 	}
 
 	return svc.Image
@@ -92,7 +93,7 @@ func (svc *Service) GetHostMounts(dataDir string) []mount.Mount {
 		volumeParts := strings.Split(volume, ":")
 		hostPath := volumeParts[0]
 		if hostPath[0] == '@' {
-			hostPath = path.Join(dataDir, hostPath[1:])
+			hostPath = filepath.Join(dataDir, hostPath[1:])
 		}
 		containerPath := volumeParts[1]
 		mounts = append(mounts, mount.Mount{

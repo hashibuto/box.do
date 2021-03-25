@@ -4,7 +4,7 @@ import (
 	"box/manifest"
 	"box/runtime"
 	"os"
-	"path"
+	"path/filepath"
 )
 
 type ShutdownCmd struct {
@@ -16,7 +16,7 @@ func (cmd *ShutdownCmd) Run() error {
 		return err
 	}
 
-	manifestFilename := path.Join(dirName, "box.yml")
+	manifestFilename := filepath.Join(dirName, "box.yml")
 	mfst, err := manifest.NewManifest(manifestFilename)
 	if err != nil {
 		return err
