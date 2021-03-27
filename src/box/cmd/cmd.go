@@ -26,9 +26,12 @@ func New(command ...string) (*Command, error) {
 // Run executes the command
 func (c *Command) Run() error {
 	var scanner *bufio.Scanner
+	if c.CWD != "" {
+		c.Cmd.Dir = c.CWD
+	}
 	if c.Echo {
-		c.Cmd.Stderr = c.Cmd.Stdout
 		output, err := c.Cmd.StdoutPipe()
+		c.Cmd.Stderr = c.Cmd.Stdout
 		if err != nil {
 			return fmt.Errorf("cmd.Run: %w", err)
 		}

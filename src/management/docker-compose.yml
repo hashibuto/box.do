@@ -24,7 +24,7 @@ services:
     environment:
       DOMAIN_NAME: ${DOMAIN_NAME}
     build:
-      context: nginx
+      context: router
       dockerfile: ./Dockerfile
     networks:
       - box

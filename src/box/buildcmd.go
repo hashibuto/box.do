@@ -37,4 +37,12 @@ func (cmd *BuildCmd) Run() error {
 		return err
 	}
 
+	err = rt.Build()
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Build complete!")
+	return nil
 }

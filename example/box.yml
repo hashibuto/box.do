@@ -31,6 +31,7 @@ services:
       port: 80          # this must match the listening port in the container
 
   frontend:
+    image: '@/frontend'
     runtime_env: dev
     build:
       dockerfile: ./Dockerfile

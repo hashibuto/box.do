@@ -47,11 +47,18 @@ func (svc *Service) GetEnv() []string {
 
 // GetImage returns the image, replacing any local reference with a unique project identifier
 func (svc *Service) GetImage(uniqueSuffix string) string {
+	var imgStr string
 	if strings.HasPrefix(svc.Image, LocalImagePrefix) {
-		return fmt.Sprintf("%v_%v", svc.Image[len(LocalImagePrefix):], uniqueSuffix)
+		imgStr = fmt.Sprintf("%v_%v", svc.Image[len(LocalImagePrefix):], uniqueSuffix)
+	} else {
+		imgStr = svc.Image
 	}
 
-	return svc.Image
+	if !strings.Contains(imgStr, ":") {
+		imgStr = fmt.Sprintf("%v:latest", imgStr)
+	}
+
+	return imgStr
 }
 
 func (svc *Service) GetContainerPortSet() nat.PortSet {
@@ -92,8 +99,8 @@ func (svc *Service) GetHostMounts(dataDir string) []mount.Mount {
 	for _, volume := range svc.Volumes {
 		volumeParts := strings.Split(volume, ":")
 		hostPath := volumeParts[0]
-		if hostPath[0] == '@' {
-			hostPath = filepath.Join(dataDir, hostPath[1:])
+		if strings.HasPrefix(hostPath, LocalImagePrefix) {
+			hostPath = filepath.Join(dataDir, hostPath[len(LocalImagePrefix):])
 		}
 		containerPath := volumeParts[1]
 		mounts = append(mounts, mount.Mount{

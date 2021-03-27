@@ -26,9 +26,9 @@ type Routing struct {
 }
 
 type Manifest struct {
-	Project    string             `yaml:"project"`
-	Services   map[string]Service `yaml:"services"`
-	RuntimeEnv string             `yaml:"runtime_env"`
+	Project    string              `yaml:"project"`
+	Services   map[string]*Service `yaml:"services"`
+	RuntimeEnv string              `yaml:"runtime_env"`
 }
 
 var hostnameRe *regexp.Regexp = regexp.MustCompile("^([a-z]+){3,20}$")

@@ -6,6 +6,7 @@ import (
 	"box/manifest"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -36,7 +37,7 @@ type Runtime struct {
 var routerService manifest.Service = manifest.Service{
 	Name:     "router",
 	Hostname: "box-router",
-	Image:    "hashibuto/box-router",
+	Image:    "box-router",
 	Ports: []string{
 		"80:80",
 		"443:443",
@@ -50,7 +51,7 @@ var routerService manifest.Service = manifest.Service{
 var registryService manifest.Service = manifest.Service{
 	Name:     "registry",
 	Hostname: "box-registry",
-	Image:    "hashibuto/box-registry",
+	Image:    "box-registry",
 	Ports: []string{
 		"5000:5000",
 	},
@@ -61,7 +62,7 @@ var registryService manifest.Service = manifest.Service{
 
 var cronService manifest.Service = manifest.Service{
 	Name:  "cron",
-	Image: "hashibuto/box-cron",
+	Image: "box-cron",
 	Volumes: []string{
 		"@/letsencrypt:/etc/letsencrypt",
 		"@/www/acme:/var/www/acme",
@@ -156,9 +157,13 @@ func New(mfst *manifest.Manifest, cfg *config.Config, isProduction bool) (*Runti
 	}, nil
 }
 
-func (rt *Runtime) Shutdown() error {
-	defer rt.Client.Close()
-	containers, err := rt.Client.ContainerList(rt.Context, types.ContainerListOptions{})
+func (rt *Runtime) StopAnyRunning() error {
+	containers, err := rt.Client.ContainerList(
+		rt.Context,
+		types.ContainerListOptions{
+			All: true,
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -166,6 +171,11 @@ func (rt *Runtime) Shutdown() error {
 	containerIDs := []string{}
 	for _, container := range containers {
 		for _, name := range container.Names {
+			if strings.HasPrefix(name, "/") {
+				// Remove the leading slash -- why...Docker?
+				name = name[1:]
+			}
+
 			if strings.HasPrefix(name, boxContainerPrefix) {
 				containerIDs = append(containerIDs, container.ID)
 				break
@@ -179,18 +189,16 @@ func (rt *Runtime) Shutdown() error {
 			fmt.Printf("Stopping container %v...", containerID)
 			group.Go(func() error {
 				if err = rt.Client.ContainerStop(rt.Context, containerID, nil); err != nil {
-					fmt.Printf("Error stopping container %v\n", containerID)
+					fmt.Println("Error")
 					return err
 				}
-				fmt.Printf("Stopped container %v\n", containerID)
+				fmt.Println("Done")
 				return nil
 			})
 
 		}
 
-		if err := group.Wait(); err == nil {
-			fmt.Println("Completed")
-		} else {
+		if err := group.Wait(); err != nil {
 			fmt.Println("An error occurred while closing one or more containers")
 		}
 
@@ -207,22 +215,29 @@ func (rt *Runtime) Shutdown() error {
 						Force:         false,
 					},
 				); err != nil {
-					fmt.Printf("Error removing container %v\n", containerID)
+					fmt.Println("Error")
 					return err
 				}
-				fmt.Printf("Removed container %v\n", containerID)
+				fmt.Println("Done")
 				return nil
 			})
 
 		}
 
-		if err := group.Wait(); err == nil {
-			fmt.Println("Completed")
-		} else {
+		if err := group.Wait(); err != nil {
 			fmt.Println("An error occurred while closing one or more containers")
 		}
-	} else {
-		fmt.Printf("No box containers running, nothing to do.")
+	}
+
+	return nil
+}
+
+func (rt *Runtime) Shutdown() error {
+	defer rt.Client.Close()
+
+	err := rt.StopAnyRunning()
+	if err != nil {
+		return err
 	}
 
 	configDir, err := config.GetConfigDir()
@@ -237,6 +252,11 @@ func (rt *Runtime) Shutdown() error {
 
 // Start will create and start the required containers
 func (rt *Runtime) Start() error {
+	err := rt.StopAnyRunning()
+	if err != nil {
+		return err
+	}
+
 	var coreServices []manifest.Service
 	if rt.Production == true {
 		coreServices = prodServices
@@ -244,9 +264,9 @@ func (rt *Runtime) Start() error {
 		coreServices = devServices
 	}
 
-	allServices := []manifest.Service{}
+	allServices := []*manifest.Service{}
 	for _, service := range coreServices {
-		allServices = append(allServices, service)
+		allServices = append(allServices, &service)
 	}
 	for _, service := range rt.Manifest.Services {
 		allServices = append(allServices, service)
@@ -255,10 +275,42 @@ func (rt *Runtime) Start() error {
 	containerBodyByServiceName := map[string]container.ContainerCreateCreatedBody{}
 	var createErr error
 
+	// Get locally stored images
+	images, err := rt.Client.ImageList(rt.Context, types.ImageListOptions{All: true})
+	if err != nil {
+		return fmt.Errorf("Can't get local image list: %w", err)
+	}
+
+	existingTags := map[string]bool{}
+	for _, image := range images {
+		for _, tag := range image.RepoTags {
+			existingTags[tag] = true
+		}
+	}
+
+	// Pull all required images
+	for _, service := range allServices {
+		image := service.GetImage(rt.Config.ProjectNameHash())
+		if _, ok := existingTags[image]; ok {
+			fmt.Printf("Image %v available locally, skipping...\n", image)
+		} else {
+			fmt.Println("Pulling image", image)
+			reader, err := rt.Client.ImagePull(
+				rt.Context,
+				image,
+				types.ImagePullOptions{},
+			)
+			if err != nil {
+				return fmt.Errorf("Error pulling image %v: %w", image, err)
+			}
+			io.Copy(os.Stdout, reader)
+		}
+	}
+
 	// Create all the services
 	for _, service := range allServices {
 		hostname := service.GetHostname()
-		containerName := fmt.Sprint("%v%v", boxContainerPrefix, service.Name)
+		containerName := fmt.Sprintf("%v%v", boxContainerPrefix, service.Name)
 
 		// If a routing exists, new containers automatically get a "_1" suffix,
 		// same goes for hostname
@@ -275,10 +327,11 @@ func (rt *Runtime) Start() error {
 		}
 
 		var dataDir string
+		var err error
 		if rt.Production == true {
 			dataDir = prodDataDir
 		} else {
-			dataDir, err := rt.Config.DataDir()
+			dataDir, err = rt.Config.DataDir()
 			if err != nil {
 				return err
 			}
@@ -304,7 +357,9 @@ func (rt *Runtime) Start() error {
 			Mounts:       mounts,
 		}
 
-		containerBody, createErr := rt.Client.ContainerCreate(
+		fmt.Println("Creating container for service", service.Name)
+		var containerBody container.ContainerCreateCreatedBody
+		containerBody, createErr = rt.Client.ContainerCreate(
 			rt.Context,
 			&contConfig,
 			&hostConfig,
@@ -321,7 +376,7 @@ func (rt *Runtime) Start() error {
 	}
 
 	if createErr != nil {
-		fmt.Println("Error creating containers")
+		fmt.Println("Error creating container", createErr)
 		for _, containerBody := range containerBodyByServiceName {
 			fmt.Println("Removing container ", containerBody.ID)
 			rt.Client.ContainerRemove(rt.Context, containerBody.ID, types.ContainerRemoveOptions{})
@@ -348,16 +403,19 @@ func (rt *Runtime) Start() error {
 		for _, service := range tranche {
 
 			group.Go(func() error {
-				fmt.Println("Starting container for ", service.Name)
+				fmt.Println("Starting container for", service.Name)
 				containerBody := containerBodyByServiceName[service.Name]
 				err := rt.Client.ContainerStart(rt.Context, containerBody.ID, types.ContainerStartOptions{})
-				return err
+				if err != nil {
+					return fmt.Errorf("Error starting container for service %v: %w", service.Name, err)
+				}
+				fmt.Println("Successfully started container", containerBody.ID)
+
+				return nil
 			})
 		}
 
-		if err := group.Wait(); err == nil {
-			fmt.Println("Completed")
-		} else {
+		if err := group.Wait(); err != nil {
 			fmt.Println("An error occurred while starting containers, rolling back...")
 			newErr := rt.Shutdown()
 			if newErr != nil {
@@ -367,6 +425,8 @@ func (rt *Runtime) Start() error {
 			return err
 		}
 	}
+
+	fmt.Println("Containers running!")
 
 	return nil
 }
@@ -379,7 +439,7 @@ func (rt *Runtime) Build() error {
 
 	for serviceName, service := range rt.Manifest.Services {
 		if service.Build.Context != "" {
-			fmt.Println("Building image for ", serviceName)
+			fmt.Println("Building image for", serviceName)
 			contextPath, err := filepath.Abs(filepath.Join(dir, service.Build.Context))
 			if err != nil {
 				return fmt.Errorf("runtime.Build: %w", err)
@@ -396,6 +456,7 @@ func (rt *Runtime) Build() error {
 				"build",
 				"--file", dockerfileAbsPath,
 				"--tag", image,
+				".",
 			)
 			if err != nil {
 				return fmt.Errorf("runtime.Build: %w", err)
