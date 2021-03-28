@@ -4,9 +4,10 @@ import (
 	"box/cmd"
 	"box/config"
 	"box/manifest"
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -68,6 +69,18 @@ var cronService manifest.Service = manifest.Service{
 		"@/www/acme:/var/www/acme",
 		"/var/run/docker.sock:/var/run/docker.sock",
 	},
+}
+
+type ProgressDetail struct {
+	Current int `json:"current"`
+	Total   int `json:"total"`
+}
+
+type PullInfo struct {
+	ID             string          `json:"id"`
+	Status         string          `json:"status"`
+	Progress       string          `json:"progress"`
+	ProgressDetail *ProgressDetail `json:"progressDetail"`
 }
 
 // All box managed containers will start with this prefix
@@ -184,48 +197,30 @@ func (rt *Runtime) StopAnyRunning() error {
 	}
 
 	if len(containerIDs) > 0 {
-		group := new(errgroup.Group)
 		for _, containerID := range containerIDs {
 			fmt.Printf("Stopping container %v...", containerID)
-			group.Go(func() error {
-				if err = rt.Client.ContainerStop(rt.Context, containerID, nil); err != nil {
-					fmt.Println("Error")
-					return err
-				}
+			if err = rt.Client.ContainerStop(rt.Context, containerID, nil); err != nil {
+				fmt.Println("Error")
+			} else {
 				fmt.Println("Done")
-				return nil
-			})
-
+			}
 		}
 
-		if err := group.Wait(); err != nil {
-			fmt.Println("An error occurred while closing one or more containers")
-		}
-
-		group = new(errgroup.Group)
 		for _, containerID := range containerIDs {
 			fmt.Printf("Removing container %v...", containerID)
-			group.Go(func() error {
-				if err = rt.Client.ContainerRemove(
-					rt.Context,
-					containerID,
-					types.ContainerRemoveOptions{
-						RemoveVolumes: false,
-						RemoveLinks:   false,
-						Force:         false,
-					},
-				); err != nil {
-					fmt.Println("Error")
-					return err
-				}
+			if err = rt.Client.ContainerRemove(
+				rt.Context,
+				containerID,
+				types.ContainerRemoveOptions{
+					RemoveVolumes: false,
+					RemoveLinks:   false,
+					Force:         false,
+				},
+			); err != nil {
+				fmt.Println("Error")
+			} else {
 				fmt.Println("Done")
-				return nil
-			})
-
-		}
-
-		if err := group.Wait(); err != nil {
-			fmt.Println("An error occurred while closing one or more containers")
+			}
 		}
 	}
 
@@ -303,7 +298,26 @@ func (rt *Runtime) Start() error {
 			if err != nil {
 				return fmt.Errorf("Error pulling image %v: %w", image, err)
 			}
-			io.Copy(os.Stdout, reader)
+
+			scanner := bufio.NewScanner(reader)
+			for scanner.Scan() {
+				line := scanner.Text()
+				if strings.HasPrefix(line, "{") {
+					pullinfo := PullInfo{}
+					err = json.Unmarshal([]byte(line), &pullinfo)
+					if err != nil {
+						fmt.Println("Error")
+						fmt.Println(line)
+						continue
+					}
+
+					// Reset the cursor
+					fmt.Printf("\033[G\033[K%v    %v", pullinfo.Status, pullinfo.Progress)
+				} else {
+					fmt.Println(line)
+				}
+			}
+			fmt.Println()
 		}
 	}
 
